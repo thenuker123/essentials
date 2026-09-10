@@ -1,38 +1,34 @@
 package com.sameerasw.essentials.utils
 
-import java.io.BufferedReader
-import java.io.InputStreamReader
 import android.util.Log
+import com.sameerasw.essentials.shizuku.ShizukuProcessHelper
 
 object ImmersiveModeManager {
     private const val TAG = "ImmersiveModeManager"
     private const val KEY = "policy_control"
 
-    private fun executeShell(command: String): String? {
+    private fun runShizukuCommand(command: String): String {
         return try {
-            val process = Runtime.getRuntime().exec(command)
-            val output = BufferedReader(InputStreamReader(process.inputStream)).use { it.readText() }
-            process.waitFor()
-            output.trim()
+            ShizukuProcessHelper.runCommand(command)?.trim() ?: ""
         } catch (e: Exception) {
-            Log.e(TAG, "Shell execution failed", e)
-            null
+            Log.e(TAG, "Immersive command execution dropped", e)
+            ""
         }
     }
 
     /**
-     * Extracts packages actively inside the immersive setting rule.
+     * Captures and filters out packages actively hidden inside the immersive config.
      */
     fun getImmersiveApps(): List<String> {
-        val currentSetting = executeShell("settings get secure $KEY")
-        if (currentSetting.isNullOrEmpty() || currentSetting == "null" || !currentSetting.startsWith("immersive.full=")) {
+        val currentSetting = runShizukuCommand("settings get secure $KEY")
+        if (currentSetting.isEmpty() || currentSetting == "null" || !currentSetting.startsWith("immersive.full=")) {
             return emptyList()
         }
         return currentSetting.removePrefix("immersive.full=").split(",")
     }
 
     /**
-     * Toggles an app inside the system-wide immersive rule configuration.
+     * Appends or pulls a target package name from the core immersive policy string.
      */
     fun toggleImmersiveMode(packageName: String, enable: Boolean): Boolean {
         val currentApps = getImmersiveApps().toMutableList()
@@ -51,7 +47,7 @@ object ImmersiveModeManager {
             "settings put secure $KEY $newValue"
         }
         
-        executeShell(command)
+        runShizukuCommand(command)
         return true
     }
 }
