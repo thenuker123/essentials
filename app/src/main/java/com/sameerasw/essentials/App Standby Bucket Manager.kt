@@ -1,49 +1,41 @@
-package com.sameerasw.essentials.utils // Change this to your actual package path if different
+package com.sameerasw.essentials.utils
 
-import java.io.BufferedReader
-import java.io.InputStreamReader
 import android.util.Log
+import com.sameerasw.essentials.shizuku.ShizukuProcessHelper
 
 object StandbyBucketManager {
     private const val TAG = "StandbyBucketManager"
 
     /**
-     * Executes a terminal command using the project's internal runtime processor.
+     * Executes an ADB command via the app's internal Shizuku processor
      */
-    private fun executeShell(command: String): List<String> {
-        val output = mutableListOf<String>()
-        try {
-            // Replaces basic command invocation; adapts to the app's Shizuku/Root wrapper if needed
-            val process = Runtime.getRuntime().exec(command)
-            BufferedReader(InputStreamReader(process.inputStream)).use { reader ->
-                var line: String?
-                while (reader.readLine().also { line = it } != null) {
-                    line?.let { output.add(it) }
-                }
-            }
-            process.waitFor()
+    private fun runShizukuCommand(command: String): String {
+        return try {
+            // Uses the fork's native Shizuku execution layer
+            val result = ShizukuProcessHelper.runCommand(command)
+            result?.trim() ?: ""
         } catch (e: Exception) {
-            Log.e(TAG, "Shell execution failed for command: $command", e)
+            Log.e(TAG, "Failed to route command via Shizuku: $command", e)
+            ""
         }
-        return output
     }
 
     /**
-     * Retrieves the current standby bucket integer for a package.
-     * Returns 10 (Active) as a baseline default if the system execution fails.
+     * Obtains the integer representing the active background bucket.
+     * Returns a baseline safe default (10 = Active) if processing drops.
      */
     fun getBucket(packageName: String): Int {
-        val result = executeShell("am get-standby-bucket $packageName")
-        return result.firstOrNull()?.trim()?.toIntOrNull() ?: 10
+        val output = runShizukuCommand("am get-standby-bucket $packageName")
+        return output.toIntOrNull() ?: 10
     }
 
     /**
-     * Shifts an application into a target standby bucket.
+     * Forces the designated application package into a target standby state.
      */
     fun setBucket(packageName: String, bucketValue: Int): Boolean {
         val command = "am set-standby-bucket $packageName $bucketValue"
-        executeShell(command)
-        // Verify if it successfully applied
+        runShizukuCommand(command)
+        // Self-verify that the system accepted the shift
         return getBucket(packageName) == bucketValue
     }
 }
